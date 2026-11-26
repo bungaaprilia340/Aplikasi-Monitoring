@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="id"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0a">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&family=Oswald:wght@500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<script src="/theme.js"></script>
+<title>Anggota Aktif – PALASENA</title></head>
+<body>
+
+<header class="navwrap">
+  <div class="navbar">
+    <a class="brandrow" href="/dashboard.html" aria-label="Ke dashboard">
+      <img src="/logo.png" alt="" style="height:38px;width:auto"><span class="brand-s">PALASENA</span>
+    </a>
+    <nav class="nav">
+      <a class="nav-link active" href="/anggota.html">
+        <svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-5.5 6-5.5s6 2 6 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c2.4 0 4 1.6 4 4.5"/></svg>
+        <span>Anggota</span>
+      </a>
+    </nav>
+    <div class="acts">
+      <button type="button" class="icon-btn" data-theme-btn></button>
+      <div class="akun-wrap">
+        <button type="button" class="sm ghost akun" id="akun" aria-haspopup="true">
+          <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z"/></svg>
+          <span class="txt">Akun</span>
+          <svg class="ico" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="menu" id="menu">
+          <div class="menu-head"><b id="mnName">…</b><span class="mut" id="mnRole"></span></div>
+          <a class="mi" href="/dashboard.html">Dashboard</a>
+          <button type="button" class="mi" id="out">Keluar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="ahero">
+  <svg class="ahero-bg" viewBox="0 0 1200 420" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+    <defs>
+      <pattern id="pine" width="36" height="60" patternUnits="userSpaceOnUse"><path class="pine-shape" d="M18 4l10 22h-6l8 16H6l8-16h-6z"/></pattern>
+    </defs>
+    <g class="stars"><circle cx="500" cy="40" r="1.4"/><circle cx="640" cy="25" r="1.2"/><circle cx="780" cy="60" r="1.4"/><circle cx="880" cy="30" r="1.2"/><circle cx="420" cy="90" r="1.2"/><circle cx="560" cy="110" r="1"/><circle cx="960" cy="80" r="1.4"/><circle cx="130" cy="40" r="1.2"/><circle cx="60" cy="110" r="1"/><circle cx="1120" cy="50" r="1.2"/></g>
+    <circle class="sun" cx="300" cy="72" r="20"/>
+    <g class="cloud-w w1"><ellipse cx="0" cy="70" rx="46" ry="9"/><ellipse cx="30" cy="62" rx="28" ry="9"/></g>
+    <g class="cloud-w w2"><ellipse cx="0" cy="130" rx="38" ry="7"/><ellipse cx="24" cy="124" rx="22" ry="7"/></g>
+    <polygon class="pm-a" points="0,420 0,215 90,150 170,95 235,150 290,120 370,230 450,300 520,420"/>
+    <polyline class="rim" points="170,95 235,150 290,120"/>
+    <polygon class="pm-a" points="1200,420 1200,190 1110,140 1040,90 985,150 925,130 840,230 760,300 690,420"/>
+    <polyline class="rim" points="1040,90 985,150 925,130"/>
+    <polygon class="pm-b" points="0,420 0,300 120,250 230,300 330,270 420,330 500,420"/>
+    <polygon class="pm-b" points="1200,420 1200,290 1100,245 1000,300 900,275 800,335 720,420"/>
+    <rect class="trees" x="0" y="335" width="440" height="85" fill="url(#pine)"/>
+    <rect class="trees" x="760" y="335" width="440" height="85" fill="url(#pine)"/>
+  </svg>
+  <div class="ahero-in">
+    <span class="accent-line"></span>
+    <h1 class="big">Anggota Aktif <em>Palasena</em></h1>
+    <p class="sub">Bersama, berkarya, dan menjaga alam.</p>
+    <div class="select-wrap">
+      <svg class="ico lead" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-5.5 6-5.5s6 2 6 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c2.4 0 4 1.6 4 4.5"/></svg>
+      <select id="angkatan" aria-label="Pilih angkatan"><option value="">Pilih angkatan</option></select>
+      <svg class="ico chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+</section>
+
+<main class="tsection">
+  <div class="tcard">
+    <div class="tscroll">
+      <table>
+        <thead><tr>
+          <th><span class="th"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z"/></svg>Nama Lengkap</span></th>
+          <th><span class="th"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l5 8h-3l4 6H6l4-6H7z"/><path d="M12 17v4"/></svg>Nama Rimba</span></th>
+          <th><span class="th"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5h6v2M3 13h18"/></svg>Jabatan</span></th>
+          <th><span class="th"><svg class="ico" viewBox="0 0 24 24"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>Kelas</span></th>
+          <th><span class="th"><svg class="ico" viewBox="0 0 24 24"><path d="M5 9h14M5 15h14M10 4L8 20M16 4l-2 16"/></svg>NIS</span></th>
+          <th><span class="th"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.6-1.6 1.8-2.2 3-2.2s2.4.6 3 2.2M14 10h4M14 14h4"/></svg>NISN</span></th>
+          <th id="thAksi" class="hide">Aksi</th>
+        </tr></thead>
+        <tbody id="tb"></tbody>
+      </table>
+    </div>
+    <div class="tfoot">
+      <span class="mut" id="info"></span>
+      <div class="pager">
+        <button type="button" class="pg" id="prev" aria-label="Halaman sebelumnya"><svg class="ico" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <span class="pg cur" id="pgnum">1</span>
+        <button type="button" class="pg" id="next" aria-label="Halaman berikutnya"><svg class="ico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<dialog id="dlg">
+  <form id="ef" class="dlg-in">
+    <h2>Edit data anggota</h2>
+    <div class="fgrid">
+      <div class="full"><label>Nama lengkap</label><input id="eNama" required maxlength="60"></div>
+      <div><label>Nama rimba</label><input id="eRimba" maxlength="40"></div>
+      <div><label>Jabatan</label><select id="eJab"></select></div>
+      <div><label>Kelas</label><input id="eKelas" maxlength="20" placeholder="contoh: XI RPL 1"></div>
+      <div><label>Angkatan</label><input id="eAng" inputmode="numeric" maxlength="2" placeholder="contoh: 21"></div>
+      <div><label>NIS</label><input id="eNis" inputmode="text" maxlength="20"></div>
+      <div><label>NISN</label><input id="eNisn" inputmode="text" maxlength="20"></div>
+    </div>
+    <div class="err" id="eErr"></div>
+    <div class="dlg-actions"><button type="button" class="ghost" id="cancel">Batal</button><button type="submit">Simpan</button></div>
+  </form>
+</dialog>
+
+<script>
+const $=i=>document.getElementById(i);
+const LABEL={anggota:'Anggota',ketum:'Ketua Umum',sekretaris:'Sekretaris',bendahara:'Bendahara',pembina:'Pembina',admin:'Admin'};
+
+/* ---- Data dari database ---- */
+const JAB={anggota:'Anggota',ketum:'Ketua Umum',sekretaris:'Sekretaris',bendahara:'Bendahara',pembina:'Pembina'};
+let DATA=[],ME=0,CAN_EDIT=false,first=true,editing=null;
+const PER=10;let page=1;
+
+async function load(){
+  const r=await fetch('/api/anggota');
+  if(r.status===401){location.href='/';return}
+  const d=await r.json();
+  DATA=d.anggota;ME=d.meId;CAN_EDIT=d.canEdit;
+  $('thAksi').classList.toggle('hide',!CAN_EDIT);
+  buildAngkatan();render();
+}
+function buildAngkatan(){
+  const sel=$('angkatan'),keep=sel.value;
+  const list=[...new Set(DATA.map(a=>a.angkatan).filter(x=>x!=null))].sort((a,b)=>b-a);
+  sel.textContent='';
+  const all=document.createElement('option');all.value='';all.textContent='Semua Angkatan';sel.append(all);
+  list.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent='Angkatan '+n;sel.append(o)});
+  if(first){sel.value=list.length?String(list[0]):'';first=false}
+  else sel.value=list.map(String).includes(keep)?keep:'';
+}
+function cell(tr,text){const td=document.createElement('td');td.textContent=(text==null||text==='')?'—':text;tr.append(td)}
+function render(){
+  const body=$('tb');body.textContent='';
+  const sel=$('angkatan').value;
+  const view=DATA.filter(a=>!sel||String(a.angkatan)===sel);
+  const total=view.length,pages=Math.max(1,Math.ceil(total/PER));
+  page=Math.min(page,pages);
+  if(!total){
+    const tr=document.createElement('tr');tr.className='empty';
+    const td=document.createElement('td');td.colSpan=CAN_EDIT?7:6;td.textContent='Belum ada data anggota.';
+    tr.append(td);body.append(tr);
+  }
+  view.slice((page-1)*PER,page*PER).forEach(a=>{
+    const tr=document.createElement('tr');
+    cell(tr,a.nama);cell(tr,a.nama_rimba);cell(tr,JAB[a.role]);cell(tr,a.kelas);cell(tr,a.nis);cell(tr,a.nisn);
+    if(CAN_EDIT){
+      const td=document.createElement('td');const b=document.createElement('button');
+      b.type='button';b.className='sm ghost';b.textContent='Edit';b.onclick=()=>openEdit(a);
+      td.append(b);tr.append(td);
+    }
+    body.append(tr);
+  });
+  const from=total?(page-1)*PER+1:0,to=Math.min(page*PER,total);
+  $('info').textContent='Menampilkan '+from+'–'+to+' dari '+total+' data';
+  $('pgnum').textContent=page;
+  $('prev').disabled=page<=1;$('next').disabled=page>=pages;
+}
+$('prev').onclick=()=>{page--;render()};
+$('next').onclick=()=>{page++;render()};
+$('angkatan').onchange=()=>{page=1;render()};
+
+/* ---- Edit (admin / Ketua Umum) ---- */
+function openEdit(a){
+  editing=a;
+  $('eNama').value=a.nama||'';$('eRimba').value=a.nama_rimba||'';$('eKelas').value=a.kelas||'';
+  $('eAng').value=a.angkatan??'';$('eNis').value=a.nis||'';$('eNisn').value=a.nisn||'';
+  const j=$('eJab');j.textContent='';
+  Object.entries(JAB).forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;if(v===a.role)o.selected=true;j.append(o)});
+  j.disabled=a.id===ME;
+  $('eErr').textContent='';
+  $('dlg').showModal();
+}
+$('cancel').onclick=()=>$('dlg').close();
+$('dlg').addEventListener('click',e=>{if(e.target===$('dlg'))$('dlg').close()});
+$('ef').onsubmit=async e=>{
+  e.preventDefault();
+  const body={nama:$('eNama').value,nama_rimba:$('eRimba').value,kelas:$('eKelas').value,nis:$('eNis').value,nisn:$('eNisn').value,angkatan:$('eAng').value};
+  if(!$('eJab').disabled)body.role=$('eJab').value;
+  const r=await fetch('/api/anggota/'+editing.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d=await r.json();
+  if(r.ok){$('dlg').close();load()}else $('eErr').textContent=d.error||'Gagal menyimpan';
+};
+load();
+
+/* ---- Akun ---- */
+$('akun').onclick=e=>{e.stopPropagation();$('menu').classList.toggle('open')};
+document.addEventListener('click',()=>$('menu').classList.remove('open'));
+$('out').onclick=async()=>{await fetch('/api/logout',{method:'POST'});location.href='/'};
+fetch('/api/me').then(r=>{if(r.status===401){location.href='/';return null}return r.json()}).then(u=>{
+  if(!u)return;$('mnName').textContent=u.nama;$('mnRole').textContent=LABEL[u.role]||'';
+});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js');
+</script></body></html>

@@ -1,72 +1,110 @@
+require('express-async-errors');
 const express = require('express');
-const { DatabaseSync } = require('node:sqlite');
+const { createClient } = require('@libsql/client');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const { pathToFileURL } = require('url');
 
-const PROD = process.env.NODE_ENV === 'production';
+const PROD = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
 const SECRET = process.env.JWT_SECRET || 'ganti-rahasia-ini';
-if (PROD && (!process.env.JWT_SECRET || SECRET.length < 16)) {
-  console.error('FATAL: set JWT_SECRET (minimal 16 karakter acak) saat NODE_ENV=production.');
-  process.exit(1);
+if (PROD && (!process.env.JWT_SECRET || SECRET.length < 32)) {
+  throw new Error('Konfigurasi JWT_SECRET belum benar. Isi dengan string acak minimal 32 karakter di Environment Variables.');
 }
-if (!process.env.JWT_SECRET) console.warn('PERINGATAN: JWT_SECRET belum diatur. Hanya boleh untuk percobaan lokal.');
+
+// Lokal memakai file SQLite yang sama. Di Vercel, gunakan database SQLite-compatible
+// jarak jauh (Turso/libSQL), karena filesystem function Vercel tidak persisten.
+if (PROD && (!process.env.TURSO_DATABASE_URL || !process.env.TURSO_AUTH_TOKEN)) {
+  throw new Error('TURSO_DATABASE_URL dan TURSO_AUTH_TOKEN wajib diatur di Vercel.');
+}
+const db = createClient(PROD
+  ? { url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN }
+  : { url: pathToFileURL(path.join(__dirname, 'palasena.db')).href }
+);
+
+const get = async (sql, args = []) => {
+  const result = await db.execute({ sql, args });
+  return result.rows[0] || null;
+};
+const all = async (sql, args = []) => {
+  const result = await db.execute({ sql, args });
+  return result.rows;
+};
+const run = async (sql, args = []) => {
+  const result = await db.execute({ sql, args });
+  return { changes: Number(result.rowsAffected || 0), lastInsertRowid: result.lastInsertRowid };
+};
+
+async function initDb() {
+  await db.execute(`CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nama TEXT NOT NULL,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'anggota',
+    status TEXT NOT NULL DEFAULT 'aktif',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  const columns = await all('PRAGMA table_info(users)');
+  const have = columns.map((column) => column.name);
+  for (const [column, type] of [['nama_rimba', 'TEXT'], ['kelas', 'TEXT'], ['nis', 'TEXT'], ['nisn', 'TEXT'], ['angkatan', 'INTEGER']]) {
+    if (!have.includes(column)) await db.execute(`ALTER TABLE users ADD COLUMN ${column} ${type}`);
+  }
+
+  const admin = await get("SELECT 1 AS found FROM users WHERE role='admin' LIMIT 1");
+  if (!admin) {
+    if (PROD && !process.env.ADMIN_PASSWORD) {
+      throw new Error('ADMIN_PASSWORD wajib diatur untuk membuat akun admin pertama.');
+    }
+    const username = (process.env.ADMIN_USERNAME || 'admin').toLowerCase();
+    const password = process.env.ADMIN_PASSWORD || 'admin123';
+    await run('INSERT INTO users(nama,username,password_hash,role) VALUES (?,?,?,?)',
+      ['Administrator', username, bcrypt.hashSync(password, 10), 'admin']);
+    console.log(`Akun admin dibuat -> username: ${username}`);
+    if (!process.env.ADMIN_PASSWORD) console.warn('PERINGATAN: password admin lokal default masih admin123. Segera ganti!');
+  }
+}
+const dbReady = initDb();
 
 const PENGURUS = ['ketum', 'sekretaris', 'bendahara', 'pembina'];
 const ASSIGNABLE = ['anggota', ...PENGURUS];
 const INTERNAL = ['admin', ...PENGURUS];
 const MANAGE_ROLES = ['admin', 'ketum'];
 
-const db = new DatabaseSync(path.join(__dirname, 'palasena.db'));
-db.exec(`
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  nama TEXT NOT NULL,
-  username TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'anggota',
-  status TEXT NOT NULL DEFAULT 'aktif',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);`);
-
-// Kolom data anggota (ditambahkan otomatis ke database lama)
-const have = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
-for (const [col, type] of [['nama_rimba', 'TEXT'], ['kelas', 'TEXT'], ['nis', 'TEXT'], ['nisn', 'TEXT'], ['angkatan', 'INTEGER']])
-  if (!have.includes(col)) db.exec(`ALTER TABLE users ADD COLUMN ${col} ${type}`);
-
-if (!db.prepare("SELECT 1 FROM users WHERE role='admin'").get()) {
-  if (PROD && !process.env.ADMIN_PASSWORD) {
-    console.error('FATAL: set ADMIN_PASSWORD untuk membuat akun admin pertama.');
-    process.exit(1);
-  }
-  const u = (process.env.ADMIN_USERNAME || 'admin').toLowerCase();
-  const p = process.env.ADMIN_PASSWORD || 'admin123';
-  db.prepare('INSERT INTO users(nama,username,password_hash,role) VALUES (?,?,?,?)')
-    .run('Administrator', u, bcrypt.hashSync(p, 10), 'admin');
-  console.log(`Akun admin dibuat -> username: ${u}`);
-  if (!process.env.ADMIN_PASSWORD) console.warn('PERINGATAN: ADMIN_PASSWORD belum diatur, memakai "admin123". Segera ganti!');
-}
-
 /* ---------- Pembatas percobaan (anti tebak password) ---------- */
-const counters = new Map();   // key -> { n, reset }
-const sweep = setInterval(() => { const t = Date.now(); for (const [k, v] of counters) if (v.reset < t) counters.delete(k); }, 60e3);
+const counters = new Map();
+const sweep = setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of counters) if (value.reset < now) counters.delete(key);
+}, 60e3);
 sweep.unref();
 const hit = (key, windowMs) => {
-  const now = Date.now(); let c = counters.get(key);
-  if (!c || c.reset < now) { c = { n: 0, reset: now + windowMs }; counters.set(key, c); }
-  c.n++; return c;
+  const now = Date.now();
+  let counter = counters.get(key);
+  if (!counter || counter.reset < now) {
+    counter = { n: 0, reset: now + windowMs };
+    counters.set(key, counter);
+  }
+  counter.n++;
+  return counter;
 };
-const secsLeft = (c) => Math.max(1, Math.ceil((c.reset - Date.now()) / 1000));
-const tooMany = (res, s) => res.status(429).json({ error: `Terlalu banyak percobaan. Coba lagi dalam ${Math.ceil(s / 60)} menit.` });
-const str = (v) => (typeof v === 'string' ? v : '');
+const secsLeft = (counter) => Math.max(1, Math.ceil((counter.reset - Date.now()) / 1000));
+const tooMany = (res, seconds) => res.status(429).json({ error: `Terlalu banyak percobaan. Coba lagi dalam ${Math.ceil(seconds / 60)} menit.` });
+const str = (value) => (typeof value === 'string' ? value : '');
 const DUMMY = bcrypt.hashSync('hash-pengganti-agar-waktu-sama', 10);
-const okPw = (pw) => pw.length > 0 && Buffer.byteLength(pw) <= 72;   // batas bcrypt
+const okPw = (password) => password.length > 0 && Buffer.byteLength(password) <= 72;
 
 const app = express();
 app.disable('x-powered-by');
 if (PROD) app.set('trust proxy', 1);
-
+app.use(async (req, res, next) => {
+  try { await dbReady; next(); }
+  catch (error) {
+    console.error('Database initialization failed:', error);
+    res.status(503).json({ error: 'Database belum siap. Periksa konfigurasi database di Vercel.' });
+  }
+});
 app.use((req, res, next) => {
   res.set({
     'X-Content-Type-Options': 'nosniff',
@@ -86,154 +124,157 @@ const setCookie = (res, user) => {
   const token = jwt.sign({ id: user.id }, SECRET, { algorithm: 'HS256', expiresIn: '7d' });
   res.cookie('token', token, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 7 * 864e5, secure: PROD });
 };
-
-// Mengembalikan user dari database, atau null jika token tidak valid / akun sudah tidak ada
-const getUser = (req) => {
+const getUser = async (req) => {
   try {
     const { id } = jwt.verify(req.cookies.token, SECRET, { algorithms: ['HS256'] });
-    return db.prepare('SELECT id,nama,username,role,status FROM users WHERE id=?').get(id) || null;
+    return await get('SELECT id,nama,username,role,status FROM users WHERE id=?', [id]);
   } catch { return null; }
 };
-const auth = (req, res, next) => {
-  const u = getUser(req);
-  if (!u) return res.status(401).json({ error: 'Belum login' });
-  req.user = u; next();
+const auth = async (req, res, next) => {
+  const user = await getUser(req);
+  if (!user) return res.status(401).json({ error: 'Belum login' });
+  req.user = user;
+  next();
 };
 const internalOnly = (req, res, next) =>
   INTERNAL.includes(req.user.role) ? next() : res.status(403).json({ error: 'Khusus pengurus' });
 
-// Halaman dashboard tidak bisa dibuka tanpa login
-app.get(['/dashboard.html', '/anggota.html'], (req, res, next) => (getUser(req) ? next() : res.redirect('/')));
+// Di lokal Express menyajikan halaman. Di Vercel file public disajikan CDN Vercel;
+// semua data tetap dilindungi oleh autentikasi pada endpoint /api.
+app.get(['/dashboard.html', '/anggota.html'], async (req, res, next) => (await getUser(req)) ? next() : res.redirect('/'));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.post('/api/register', (req, res) => {
-  const ip = req.ip;
-  const c = hit('reg:' + ip, 3600e3);
-  if (c.n > 10) return tooMany(res, secsLeft(c));
+app.post('/api/register', async (req, res) => {
+  const counter = hit('reg:' + req.ip, 3600e3);
+  if (counter.n > 10) return tooMany(res, secsLeft(counter));
   const nama = str(req.body?.nama).trim();
-  const un = str(req.body?.username).trim().toLowerCase();
-  const pw = str(req.body?.password);
+  const username = str(req.body?.username).trim().toLowerCase();
+  const password = str(req.body?.password);
   if (nama.length < 2) return res.status(400).json({ error: 'Nama lengkap wajib diisi' });
-  if (!/^[a-z0-9_.]{3,20}$/.test(un)) return res.status(400).json({ error: 'Username 3-20 karakter: huruf kecil, angka, titik, atau underscore' });
-  if (pw.length < 6) return res.status(400).json({ error: 'Password minimal 6 karakter' });
-  if (!okPw(pw)) return res.status(400).json({ error: 'Password terlalu panjang (maksimal 72 karakter)' });
+  if (!/^[a-z0-9_.]{3,20}$/.test(username)) return res.status(400).json({ error: 'Username 3-20 karakter: huruf kecil, angka, titik, atau underscore' });
+  if (password.length < 6) return res.status(400).json({ error: 'Password minimal 6 karakter' });
+  if (!okPw(password)) return res.status(400).json({ error: 'Password terlalu panjang (maksimal 72 karakter)' });
   try {
-    const r = db.prepare("INSERT INTO users(nama,username,password_hash,role,status) VALUES (?,?,?, 'anggota','aktif')")
-      .run(nama.slice(0, 60), un, bcrypt.hashSync(pw, 10));
-    setCookie(res, { id: Number(r.lastInsertRowid) });
+    const result = await run("INSERT INTO users(nama,username,password_hash,role,status) VALUES (?,?,?, 'anggota','aktif')",
+      [nama.slice(0, 60), username, bcrypt.hashSync(password, 10)]);
+    setCookie(res, { id: Number(result.lastInsertRowid) });
     res.json({ ok: true });
-  } catch (e) {
-    res.status(409).json({ error: 'Username sudah dipakai' });
+  } catch (error) {
+    if (String(error.message).toLowerCase().includes('unique')) return res.status(409).json({ error: 'Username sudah dipakai' });
+    throw error;
   }
 });
 
-app.post('/api/login', (req, res) => {
-  const ip = req.ip;
-  const un = str(req.body?.username).trim().toLowerCase().slice(0, 40);
-  const pw = str(req.body?.password);
-  const key = 'fail:' + ip + '|' + un;
-
-  const all = hit('ip:' + ip, 15 * 60e3);                    // semua percobaan dari 1 IP
-  if (all.n > 30) return tooMany(res, secsLeft(all));
-  const f = counters.get(key);                                // gagal berulang untuk username yang sama
-  if (f && f.reset > Date.now() && f.n >= 5) return tooMany(res, secsLeft(f));
-
-  const u = db.prepare('SELECT * FROM users WHERE username=?').get(un);
-  // Selalu jalankan bcrypt (juga saat akun tidak ada) agar waktu respons sama
-  const match = bcrypt.compareSync(okPw(pw) ? pw : 'x', u ? u.password_hash : DUMMY);
-  if (!u || !okPw(pw) || !match) {
+app.post('/api/login', async (req, res) => {
+  const username = str(req.body?.username).trim().toLowerCase().slice(0, 40);
+  const password = str(req.body?.password);
+  const key = 'fail:' + req.ip + '|' + username;
+  const total = hit('ip:' + req.ip, 15 * 60e3);
+  if (total.n > 30) return tooMany(res, secsLeft(total));
+  const failed = counters.get(key);
+  if (failed && failed.reset > Date.now() && failed.n >= 5) return tooMany(res, secsLeft(failed));
+  const user = await get('SELECT * FROM users WHERE username=?', [username]);
+  const match = bcrypt.compareSync(okPw(password) ? password : 'x', user ? user.password_hash : DUMMY);
+  if (!user || !okPw(password) || !match) {
     hit(key, 15 * 60e3);
     return res.status(401).json({ error: 'Username atau password salah' });
   }
   counters.delete(key);
-  setCookie(res, u);
+  setCookie(res, user);
   res.json({ ok: true });
 });
 
 app.post('/api/logout', (req, res) => { res.clearCookie('token', { path: '/' }); res.json({ ok: true }); });
 app.get('/api/me', auth, (req, res) => res.json(req.user));
 
-app.get('/api/dashboard', auth, (req, res) => {
-  const count = (where, ...p) => db.prepare(`SELECT COUNT(*) c FROM users WHERE ${where}`).get(...p).c;
+app.get('/api/dashboard', auth, async (req, res) => {
+  const count = async (where, args = []) => Number((await get(`SELECT COUNT(*) AS c FROM users WHERE ${where}`, args)).c);
   const data = {
     user: req.user,
     stats: {
-      anggotaAktif: count("role='anggota' AND status='aktif'"),
-      anggotaNonaktif: count("role='anggota' AND status='nonaktif'"),
-      pengurus: count(`role IN (${PENGURUS.map(() => '?').join(',')})`, ...PENGURUS),
+      anggotaAktif: await count("role='anggota' AND status='aktif'"),
+      anggotaNonaktif: await count("role='anggota' AND status='nonaktif'"),
+      pengurus: await count(`role IN (${PENGURUS.map(() => '?').join(',')})`, PENGURUS),
     },
   };
   if (INTERNAL.includes(req.user.role)) {
     data.canManageRoles = MANAGE_ROLES.includes(req.user.role);
-    data.users = db.prepare('SELECT id,nama,username,role,status FROM users ORDER BY nama').all();
+    data.users = await all('SELECT id,nama,username,role,status FROM users ORDER BY nama');
   }
   res.json(data);
 });
 
-app.patch('/api/users/:id/status', auth, internalOnly, (req, res) => {
+app.patch('/api/users/:id/status', auth, internalOnly, async (req, res) => {
   const { status } = req.body || {};
   if (!['aktif', 'nonaktif'].includes(status)) return res.status(400).json({ error: 'Status tidak valid' });
-  db.prepare("UPDATE users SET status=? WHERE id=? AND role!='admin'").run(status, Number(req.params.id));
+  await run("UPDATE users SET status=? WHERE id=? AND role!='admin'", [status, Number(req.params.id)]);
   res.json({ ok: true });
 });
 
-app.patch('/api/users/:id/role', auth, (req, res) => {
+app.patch('/api/users/:id/role', auth, async (req, res) => {
   if (!MANAGE_ROLES.includes(req.user.role)) return res.status(403).json({ error: 'Hanya admin atau Ketua Umum' });
   const { role } = req.body || {};
   const id = Number(req.params.id);
   if (!ASSIGNABLE.includes(role)) return res.status(400).json({ error: 'Jabatan tidak valid' });
   if (id === req.user.id) return res.status(400).json({ error: 'Tidak bisa mengubah jabatan sendiri' });
-  const r = db.prepare("UPDATE users SET role=? WHERE id=? AND role!='admin'").run(role, id);
-  if (!r.changes) return res.status(404).json({ error: 'Pengguna tidak ditemukan' });
+  const result = await run("UPDATE users SET role=? WHERE id=? AND role!='admin'", [role, id]);
+  if (!result.changes) return res.status(404).json({ error: 'Pengguna tidak ditemukan' });
   res.json({ ok: true });
 });
 
 const JABATAN_ORDER = "CASE role WHEN 'ketum' THEN 1 WHEN 'sekretaris' THEN 2 WHEN 'bendahara' THEN 3 WHEN 'pembina' THEN 4 ELSE 5 END";
-
-// Daftar anggota aktif. NIS & NISN hanya dikirim ke pengurus/admin.
-app.get('/api/anggota', auth, (req, res) => {
+app.get('/api/anggota', auth, async (req, res) => {
   const internal = INTERNAL.includes(req.user.role);
-  const rows = db.prepare(
+  const rows = await all(
     `SELECT id,nama,role,nama_rimba,kelas,nis,nisn,angkatan FROM users
-     WHERE status='aktif' AND role!='admin' ORDER BY ${JABATAN_ORDER}, nama COLLATE NOCASE`).all();
+     WHERE status='aktif' AND role!='admin' ORDER BY ${JABATAN_ORDER}, nama COLLATE NOCASE`
+  );
   res.json({
     meId: req.user.id,
     canEdit: MANAGE_ROLES.includes(req.user.role),
-    anggota: rows.map((r) => (internal ? { ...r } : { ...r, nis: null, nisn: null })),
+    anggota: rows.map((row) => (internal ? row : { ...row, nis: null, nisn: null })),
   });
 });
 
-// Edit data anggota (admin / Ketua Umum)
-app.patch('/api/anggota/:id', auth, (req, res) => {
+app.patch('/api/anggota/:id', auth, async (req, res) => {
   if (!MANAGE_ROLES.includes(req.user.role)) return res.status(403).json({ error: 'Hanya admin atau Ketua Umum yang boleh mengubah data' });
   const id = Number(req.params.id);
-  const b = req.body || {};
-  const val = (v, max) => str(v).trim().slice(0, max) || null;
-
-  const nama = str(b.nama).trim();
+  const body = req.body || {};
+  const val = (value, max) => str(value).trim().slice(0, max) || null;
+  const nama = str(body.nama).trim();
   if (nama.length < 2) return res.status(400).json({ error: 'Nama lengkap wajib diisi' });
-  const nis = val(b.nis, 20), nisn = val(b.nisn, 20);
+  const nis = val(body.nis, 20);
+  const nisn = val(body.nisn, 20);
   if ((nis && !/^\d+$/.test(nis)) || (nisn && !/^\d+$/.test(nisn))) return res.status(400).json({ error: 'NIS dan NISN hanya boleh berisi angka' });
   let angkatan = null;
-  const ang = String(b.angkatan ?? '').trim();
+  const ang = String(body.angkatan ?? '').trim();
   if (ang !== '') {
     angkatan = Number(ang);
     if (!Number.isInteger(angkatan) || angkatan < 1 || angkatan > 99) return res.status(400).json({ error: 'Angkatan harus angka 1-99' });
   }
-
-  const target = db.prepare("SELECT id,role FROM users WHERE id=? AND role!='admin'").get(id);
+  const target = await get("SELECT id,role FROM users WHERE id=? AND role!='admin'", [id]);
   if (!target) return res.status(404).json({ error: 'Anggota tidak ditemukan' });
   let role = target.role;
-  if (b.role !== undefined && b.role !== target.role) {
-    if (!ASSIGNABLE.includes(b.role)) return res.status(400).json({ error: 'Jabatan tidak valid' });
+  if (body.role !== undefined && body.role !== target.role) {
+    if (!ASSIGNABLE.includes(body.role)) return res.status(400).json({ error: 'Jabatan tidak valid' });
     if (id === req.user.id) return res.status(400).json({ error: 'Tidak bisa mengubah jabatan sendiri' });
-    role = b.role;
+    role = body.role;
   }
-  db.prepare('UPDATE users SET nama=?,nama_rimba=?,kelas=?,nis=?,nisn=?,angkatan=?,role=? WHERE id=?')
-    .run(nama.slice(0, 60), val(b.nama_rimba, 40), val(b.kelas, 20), nis, nisn, angkatan, role, id);
+  await run('UPDATE users SET nama=?,nama_rimba=?,kelas=?,nis=?,nisn=?,angkatan=?,role=? WHERE id=?',
+    [nama.slice(0, 60), val(body.nama_rimba, 40), val(body.kelas, 20), nis, nisn, angkatan, role, id]);
   res.json({ ok: true });
 });
 
-app.use((err, req, res, next) => res.status(400).json({ error: 'Permintaan tidak valid' }));
+app.use((err, req, res, next) => {
+  console.error('Request failed:', err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'Terjadi kesalahan pada server. Periksa Runtime Logs Vercel.' });
+});
 
-app.listen(process.env.PORT || 3000, () => console.log('Jalan di http://localhost:' + (process.env.PORT || 3000)));
+// Vercel mendeteksi dan menjalankan Express app yang diekspor dari server.js.
+// Saat lokal, file ini tetap bisa dijalankan dengan: npm start
+module.exports = app;
+if (require.main === module) {
+  const port = process.env.PORT || 3000;
+  app.listen(port, () => console.log(`Jalan di http://localhost:${port}`));
+}

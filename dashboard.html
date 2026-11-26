@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="id"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0a">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<script src="/theme.js"></script>
+<title>Dashboard – PALASENA</title></head>
+<body><div class="wrap wide">
+  <div class="topbar">
+    <div class="brandrow"><img src="/logo.png" alt="" style="height:36px;width:auto"><span class="brand-s">PALASENA</span></div>
+    <nav class="nav"><a class="nav-link" href="/anggota.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-5.5 6-5.5s6 2 6 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c2.4 0 4 1.6 4 4.5"/></svg><span>Anggota</span></a></nav>
+    <div class="acts"><button type="button" class="icon-btn" data-theme-btn></button><button class="sm ghost" id="out">Keluar</button></div>
+  </div>
+  <div class="dash">
+  <aside class="dash-side">
+    <div id="hero" class="hero"></div>
+    <h1 id="hi">Halo</h1>
+    <div class="acts"><span class="mut" id="sub"></span><span class="badge" id="st"></span></div>
+  </aside>
+  <main class="dash-main">
+  <div class="stats">
+    <div class="stat"><b id="sA">–</b><span class="mut">Anggota aktif</span></div>
+    <div class="stat"><b id="sN">–</b><span class="mut">Nonaktif</span></div>
+    <div class="stat"><b id="sP">–</b><span class="mut">Pengurus</span></div>
+  </div>
+  <div class="card hide" id="listCard"><h2>Daftar anggota</h2><div id="list"></div></div>
+  <div class="card"><h2>Arsip dokumen</h2><div class="mut">Segera hadir: LPJ, proposal, dan notulensi forum.</div></div>
+  </main>
+  </div>
+</div>
+<script src="/hero.js"></script>
+<script>
+const $=i=>document.getElementById(i);
+const ROLES=[['anggota','Anggota'],['ketum','Ketua Umum'],['sekretaris','Sekretaris'],['bendahara','Bendahara'],['pembina','Pembina']];
+const LABEL=Object.fromEntries(ROLES.concat([['admin','Admin']]));
+const api=(u,b)=>fetch(u,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+async function load(){
+  const r=await fetch('/api/dashboard');
+  if(r.status===401){location.href='/';return}
+  const d=await r.json();
+  $('hi').textContent='Halo, '+d.user.nama;
+  $('sub').textContent=LABEL[d.user.role];
+  $('st').textContent=d.user.status;$('st').className='badge'+(d.user.status==='aktif'?'':' off');
+  $('sA').textContent=d.stats.anggotaAktif;
+  $('sN').textContent=d.stats.anggotaNonaktif;
+  $('sP').textContent=d.stats.pengurus;
+  if(!d.users)return;
+  $('listCard').classList.remove('hide');
+  const box=$('list');box.textContent='';
+  d.users.forEach(a=>{
+    const row=document.createElement('div');row.className='row';
+    const info=document.createElement('div');
+    const n=document.createElement('div');n.textContent=a.nama;n.style.fontWeight='700';
+    const m=document.createElement('div');m.className='mut';m.textContent='@'+a.username+' · '+LABEL[a.role];
+    info.append(n,m);
+    const right=document.createElement('div');right.className='acts';
+    const b=document.createElement('span');b.className='badge'+(a.status==='aktif'?'':' off');b.textContent=a.status;
+    right.append(b);
+    if(a.role!=='admin'){
+      const t=document.createElement('button');t.className='sm ghost';t.textContent=a.status==='aktif'?'Nonaktifkan':'Aktifkan';
+      t.onclick=async()=>{await api('/api/users/'+a.id+'/status',{status:a.status==='aktif'?'nonaktif':'aktif'});load()};
+      right.append(t);
+      if(d.canManageRoles&&a.id!==d.user.id){
+        const s=document.createElement('select');s.className='sm';
+        ROLES.forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;if(v===a.role)o.selected=true;s.append(o)});
+        s.onchange=async()=>{const x=await api('/api/users/'+a.id+'/role',{role:s.value});if(!x.ok)alert((await x.json()).error);load()};
+        right.append(s);
+      }
+    }
+    row.append(info,right);box.append(row);
+  });
+}
+$('out').onclick=async()=>{await fetch('/api/logout',{method:'POST'});location.href='/'};
+load();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js');
+</script></body></html>
